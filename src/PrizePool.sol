@@ -93,6 +93,10 @@ error PrizeIsZero();
 /// @notice Emitted when someone tries to claim a prize, but sets the fee recipient address to the zero address.
 error FeeRecipientZeroAddress();
 
+/// @notice Emitted when the manual claim is set to the same state that it already is.
+/// @param manualClaimState The manual claim state
+error ManualClaimStateUnchanged(bool manualClaimState);
+
 /**
  * @notice Constructor Parameters
  * @param prizeToken The token to use for prizes
@@ -192,9 +196,20 @@ contract PrizePool is TieredLiquidityDistributor, Ownable {
   /// @param amount The amount increased
   event IncreaseClaimRewards(address indexed to, uint256 amount);
 
+  /// @notice Emitted when an address receives new prize rewards when they have
+  /// opted in to manual prize claiming.
+  /// @param to The address the rewards are given to
+  /// @param amount The amount increased
+  event IncreasePrizeRewards(address indexed to, uint256 amount);
+
   /// @notice Emitted when the drawManager is set.
   /// @param drawManager The draw manager
   event DrawManagerSet(address indexed drawManager);
+
+  /// @notice Emitted when a recipient sets their manual claim preference.
+  /// @param recipient The prize recipient
+  /// @param manualClaim The new manual claim state
+  event ManualClaimSetTo(address indexed recipient, bool manualClaim);
 
   /* ============ State ============ */
 
@@ -207,6 +222,9 @@ contract PrizePool is TieredLiquidityDistributor, Ownable {
 
   /// @notice Tracks the total rewards accrued for a claimer or draw completer.
   mapping(address recipient => uint256 rewards) internal _rewards;
+
+  /// @notice Manual claim toggle that a recipient can opt in or out of.
+  mapping(address recipient => bool manualClaim) internal _useManualClaim;
 
   /// @notice The degree of POOL contribution smoothing. 0 = no smoothing, ~1 = max smoothing.
   /// @dev Smoothing spreads out vault contribution over multiple draws; the higher the smoothing the more draws.
@@ -489,9 +507,18 @@ contract PrizePool is TieredLiquidityDistributor, Ownable {
       amount = tierLiquidity.prizeSize;
     }
 
-    // co-locate to save gas
-    claimCount++;
-    _totalWithdrawn = SafeCast.toUint160(_totalWithdrawn + amount);
+    if (_useManualClaim[_prizeRecipient]) {
+      claimCount++;
+
+      emit IncreasePrizeRewards(_prizeRecipient, amount);
+      _rewards[_prizeRecipient] += amount;
+    } else {
+      // co-locate to save gas
+      claimCount++;
+      _totalWithdrawn = SafeCast.toUint160(_totalWithdrawn + amount);
+      
+      prizeToken.safeTransfer(_prizeRecipient, amount);
+    }
 
     emit ClaimedPrize(
       msg.sender,
@@ -505,9 +532,20 @@ contract PrizePool is TieredLiquidityDistributor, Ownable {
       _feeRecipient
     );
 
-    prizeToken.safeTransfer(_prizeRecipient, amount);
-
     return tierLiquidity.prizeSize;
+  }
+
+  /**
+   * @notice Sets the manual claim preference of the caller.
+   * @dev If true, prizes will be held in the prize pool until claimed manually by the recipient.
+   * Otherwise, prizes will be sent directly to the recipient when won.
+   * @param manualClaim The new manual claim state
+   */
+  function setManualClaim(bool manualClaim) external {
+    bool currentState = _useManualClaim[msg.sender];
+    if (manualClaim == currentState) revert ManualClaimStateUnchanged(manualClaim);
+    _useManualClaim[msg.sender] = manualClaim;
+    emit ManualClaimSetTo(msg.sender, manualClaim);
   }
 
   /**
@@ -683,6 +721,15 @@ contract PrizePool is TieredLiquidityDistributor, Ownable {
     uint32 _prizeIndex
   ) external view returns (bool) {
     return _claimedPrizes[_vault][_winner][_lastClosedDrawId][_tier][_prizeIndex];
+  }
+
+  /**
+   * @notice Gets the manual claim state for an address.
+   * @param _recipient The prize recipient's address
+   * @return True if the recipient has opted in for manual claim, false otherwise
+   */
+  function manualClaimState(address _recipient) external view returns (bool) {
+    return _useManualClaim[_recipient];
   }
 
   /**

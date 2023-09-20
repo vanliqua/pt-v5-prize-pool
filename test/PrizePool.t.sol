@@ -949,6 +949,174 @@ contract PrizePoolTest is Test {
     assertEq(claimPrize(sender2, 1, 0), prize, "second claim");
   }
 
+  function testClaimPrize_optInManualClaim_3Prizes_coldPooler() public {
+    contribute(100e18);
+
+    vm.startPrank(sender1);
+    prizePool.setManualClaim(true);
+    vm.stopPrank();
+
+    assertEq(prizePool.rewardBalance(sender1), 0);
+
+    closeDraw(winningRandomNumber);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas = gasleft();
+    claimPrize(sender1, 1, 0);
+    console2.log("claim manual cold first (t1): ", gas - gasleft());
+    assertEq(prizePool.claimCount(), 1);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas2 = gasleft();
+    claimPrize(sender1, 1, 1);
+    console2.log("claim manual cold second (t1): ", gas2 - gasleft());
+    assertEq(prizePool.claimCount(), 2);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas3 = gasleft();
+    claimPrize(sender1, 1, 2);
+    console2.log("claim manual cold third (t1): ", gas3 - gasleft());
+    assertEq(prizePool.claimCount(), 3);
+
+    mockTwab(address(this), sender1, 2);
+    uint gas4 = gasleft();
+    claimPrize(sender1, 2, 0);
+    console2.log("claim manual cold fourth (canary): ", gas4 - gasleft());
+    assertEq(prizePool.claimCount(), 4);
+
+    mockTwab(address(this), sender1, 2);
+    uint gas5 = gasleft();
+    claimPrize(sender1, 2, 1);
+    console2.log("claim manual cold fifth (canary): ", gas5 - gasleft());
+    assertEq(prizePool.claimCount(), 5);
+  }
+
+  function testClaimPrize_optInManualClaim_3Prizes_hotPooler() public {
+    contribute(100e18);
+
+    vm.startPrank(sender1);
+    prizePool.setManualClaim(true);
+    vm.stopPrank();
+
+    // give sender1 an initial reward balance so we are not writing to their balance for the first time:
+    prizeToken.mint(address(this), 1e18);
+    prizeToken.approve(address(prizePool), 1e18);
+    prizePool.contributeReserve(1e18);
+    prizePool.allocateRewardFromReserve(sender1, 1e18);
+
+    closeDraw(winningRandomNumber);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas = gasleft();
+    claimPrize(sender1, 1, 0);
+    console2.log("claim manual hot first (t1): ", gas - gasleft());
+    assertEq(prizePool.claimCount(), 1);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas2 = gasleft();
+    claimPrize(sender1, 1, 1);
+    console2.log("claim manual hot second (t1): ", gas2 - gasleft());
+    assertEq(prizePool.claimCount(), 2);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas3 = gasleft();
+    claimPrize(sender1, 1, 2);
+    console2.log("claim manual hot third (t1): ", gas3 - gasleft());
+    assertEq(prizePool.claimCount(), 3);
+
+    mockTwab(address(this), sender1, 2);
+    uint gas4 = gasleft();
+    claimPrize(sender1, 2, 0);
+    console2.log("claim manual hot fourth (canary): ", gas4 - gasleft());
+    assertEq(prizePool.claimCount(), 4);
+
+    mockTwab(address(this), sender1, 2);
+    uint gas5 = gasleft();
+    claimPrize(sender1, 2, 1);
+    console2.log("claim manual hot fifth (canary): ", gas5 - gasleft());
+    assertEq(prizePool.claimCount(), 5);
+  }
+
+  function testClaimPrize_autoClaim_3Prizes_coldPooler() public {
+    contribute(100e18);
+
+    assertEq(prizePool.manualClaimState(sender1), false);
+    assertEq(prizeToken.balanceOf(sender1), 0);
+
+    closeDraw(winningRandomNumber);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas = gasleft();
+    claimPrize(sender1, 1, 0);
+    console2.log("claim auto cold first (t1): ", gas - gasleft());
+    assertEq(prizePool.claimCount(), 1);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas2 = gasleft();
+    claimPrize(sender1, 1, 1);
+    console2.log("claim auto cold second (t1): ", gas2 - gasleft());
+    assertEq(prizePool.claimCount(), 2);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas3 = gasleft();
+    claimPrize(sender1, 1, 2);
+    console2.log("claim auto cold third (t1): ", gas3 - gasleft());
+    assertEq(prizePool.claimCount(), 3);
+
+    mockTwab(address(this), sender1, 2);
+    uint gas4 = gasleft();
+    claimPrize(sender1, 2, 0);
+    console2.log("claim auto cold fourth (canary): ", gas4 - gasleft());
+    assertEq(prizePool.claimCount(), 4);
+
+    mockTwab(address(this), sender1, 2);
+    uint gas5 = gasleft();
+    claimPrize(sender1, 2, 1);
+    console2.log("claim auto cold fifth (canary): ", gas5 - gasleft());
+    assertEq(prizePool.claimCount(), 5);
+  }
+
+  function testClaimPrize_autoClaim_3Prizes_hotPooler() public {
+    contribute(100e18);
+
+    assertEq(prizePool.manualClaimState(sender1), false);
+
+    // mint winner some prize token so we aren't writing to their balance for the first time:
+    prizeToken.mint(sender1, 1e16);
+
+    closeDraw(winningRandomNumber);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas = gasleft();
+    claimPrize(sender1, 1, 0);
+    console2.log("claim auto hot first (t1): ", gas - gasleft());
+    assertEq(prizePool.claimCount(), 1);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas2 = gasleft();
+    claimPrize(sender1, 1, 1);
+    console2.log("claim auto hot second (t1): ", gas2 - gasleft());
+    assertEq(prizePool.claimCount(), 2);
+
+    mockTwab(address(this), sender1, 1);
+    uint gas3 = gasleft();
+    claimPrize(sender1, 1, 2);
+    console2.log("claim auto hot third (t1): ", gas3 - gasleft());
+    assertEq(prizePool.claimCount(), 3);
+
+    mockTwab(address(this), sender1, 2);
+    uint gas4 = gasleft();
+    claimPrize(sender1, 2, 0);
+    console2.log("claim auto hot fourth (canary): ", gas4 - gasleft());
+    assertEq(prizePool.claimCount(), 4);
+
+    mockTwab(address(this), sender1, 2);
+    uint gas5 = gasleft();
+    claimPrize(sender1, 2, 1);
+    console2.log("claim auto hot fifth (canary): ", gas5 - gasleft());
+    assertEq(prizePool.claimCount(), 5);
+  }
+
   function testClaimCanaryPrize() public {
     contribute(100e18);
     closeDraw(winningRandomNumber);
@@ -1004,9 +1172,10 @@ contract PrizePoolTest is Test {
     // (if they aren't anyone can call contributePrizes with the unaccounted fee amount and basically take it as their own)
     uint accountedBalance = prizePool.accountedBalance();
     uint actualBalance = prizeToken.balanceOf(address(prizePool));
-    console2.log("accounted balance: ", accountedBalance);
-    console2.log("actual balance: ", actualBalance);
-    console2.log("diff: ", actualBalance - accountedBalance);
+    assertEq(actualBalance, accountedBalance);
+    // console2.log("accounted balance: ", accountedBalance);
+    // console2.log("actual balance: ", actualBalance);
+    // console2.log("diff: ", actualBalance - accountedBalance);
 
     // show that the claimer can still withdraw their fees:
     assertEq(prizeToken.balanceOf(address(this)), 0);
@@ -1017,9 +1186,10 @@ contract PrizePoolTest is Test {
 
     accountedBalance = prizePool.accountedBalance();
     actualBalance = prizeToken.balanceOf(address(prizePool));
-    console2.log("accounted balance: ", accountedBalance);
-    console2.log("actual balance: ", actualBalance);
-    console2.log("diff: ", actualBalance - accountedBalance);
+    assertEq(actualBalance, accountedBalance);
+    // console2.log("accounted balance: ", accountedBalance);
+    // console2.log("actual balance: ", actualBalance);
+    // console2.log("diff: ", actualBalance - accountedBalance);
   }
 
   function testTotalWithdrawn() public {
